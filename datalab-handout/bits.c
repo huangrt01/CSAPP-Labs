@@ -143,8 +143,10 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  // ~优先级大于&
+  return ~(~(~x&y)&~(~y&x));
 }
+
 /* 
  * tmin - return minimum two's complement integer 
  *   Legal ops: ! ~ & ^ | + << >>
@@ -152,10 +154,9 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
-  return 2;
-
+  return 1<<31;
 }
+
 //2
 /*
  * isTmax - returns 1 if x is the maximum, two's complement number,
@@ -165,8 +166,11 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  // !!表示不为0
+  // 0x7FFFFFFF + 1 = 0x80000000, 本身加本身等于0
+  return !((x+1)+(x+1)) & !!(x+1);
 }
+
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
  *   where bits are numbered from 0 (least significant) to 31 (most significant)
@@ -176,8 +180,10 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  int allodd= 0xAA + (0xAA<<8)+(0xAA<<16)+(0xAA<<24);
+  return !((x&allodd)^allodd);
 }
+
 /* 
  * negate - return -x 
  *   Example: negate(1) = -1.
@@ -186,8 +192,9 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x+1;
 }
+
 //3
 /* 
  * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0' to '9')
@@ -199,8 +206,10 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  // 0x 0011 100*  or 0x 0011 0***
+  return !((x^0x38)& ~0x1) | !((x^0x30)& ~0x7);
 }
+
 /* 
  * conditional - same as x ? y : z 
  *   Example: conditional(2,4,5) = 4
@@ -209,8 +218,10 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int cond = !x+(~0);
+  return (cond&y) | (~cond&z);
 }
+
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
  *   Example: isLessOrEqual(4,5) = 1.
@@ -219,8 +230,20 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  // y-x
+  int yminusx= y + (~x+1);
+  int geq0 = !((yminusx>>31)&yminusx);
+
+  // negative overflow: y<0, x>=0, y-x>=0
+  int negative_overflow= (y>>31)&!(x>>31)&!(yminusx>>31);
+  // positive overflow: x<0, y>=0, y-x<0
+  int positive_overflow= (x>>31)&!(y>>31)& (yminusx>>31);
+  
+  // return (y>=x)
+  //printf("%d  %d   %d  %d   \n",yminusx,geq0,negative_overflow,positive_overflow);
+  return (geq0 | positive_overflow) & !negative_overflow;
 }
+
 //4
 /* 
  * logicalNeg - implement the ! operator, using all of 
@@ -230,11 +253,31 @@ int isLessOrEqual(int x, int y) {
  *   Max ops: 12
  *   Rating: 4 
  */
+
+
+
 int logicalNeg(int x) {
-  return 2;
+  return ((x | (~x + 1)) >> 31) + 1;
+
+  // //my second method:
+  // unsigned xminus1= x+(~0);
+  // unsigned unsignx=x;
+
+  // // flag=0代表首位为1
+  // int flag= (~unsignx)>>31;  
+
+  // // 返回0的条件：首位为1 或 首位为0且除了首位存在1（加0xFFFFFFFF后首位为0）
+  // return flag & (~flag | ~(~xminus1>>31));
+
 }
+  //
+
+
 /* howManyBits - return the minimum number of bits required to represent x in
- *             two's complement
+ *             two's complement   
+ *  x>0: log2(x)
+ *  x<0: 32
+ *  x==0: 1
  *  Examples: howManyBits(12) = 5
  *            howManyBits(298) = 10
  *            howManyBits(-5) = 4
@@ -246,8 +289,34 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+  int isNeg=!!(x>>31);       
+  isNeg= ~(isNeg+~0);
+  x=(isNeg&(~x))|(~isNeg&x);
+  
+  int shift=(!!(x>>16))<<4; 
+  x=x>>shift;
+  int log2=shift;
+
+  shift=(!!(x>>8))<<3;
+  x=x>>shift;
+  log2=log2+shift;
+
+  shift=(!!(x>>4))<<2;
+  x=x>>shift;
+  log2=log2+shift;
+
+  shift=(!!(x>>2))<<1;
+  x=x>>shift;
+  log2=log2+shift;
+
+  shift=(x>>1);
+  x=x>>shift;
+  log2=log2+shift;
+  log2=log2+x+1;  // howManyBits(0)=1, sign bit, so plus 1 additionally
+
+  return log2;
 }
+
 //float
 /* 
  * floatScale2 - Return bit-level equivalent of expression 2*f for
@@ -263,6 +332,7 @@ int howManyBits(int x) {
 unsigned floatScale2(unsigned uf) {
   return 2;
 }
+
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
  *   for floating point argument f.
@@ -278,6 +348,7 @@ unsigned floatScale2(unsigned uf) {
 int floatFloat2Int(unsigned uf) {
   return 2;
 }
+
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
