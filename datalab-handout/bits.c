@@ -191,7 +191,8 @@ int allOddBits(int x) {
  *   Max ops: 5
  *   Rating: 2
  */
-int negate(int x) {
+
+int negate(int x){
   return ~x+1;
 }
 
@@ -289,13 +290,14 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  int isNeg=!!(x>>31);       
+  int isNeg=!!(x>>31);    
+  int shift,log2;   
   isNeg= ~(isNeg+~0);
   x=(isNeg&(~x))|(~isNeg&x);
   
-  int shift=(!!(x>>16))<<4; 
+  shift=(!!(x>>16))<<4; 
   x=x>>shift;
-  int log2=shift;
+  log2=shift;
 
   shift=(!!(x>>8))<<3;
   x=x>>shift;
@@ -329,8 +331,36 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
+
+ // 1+8+23
+ // exponent: -126~127 254个取值
 unsigned floatScale2(unsigned uf) {
-  return 2;
+  unsigned input=uf;
+  unsigned sign;
+  unsigned exponent;
+  unsigned fraction = uf&0xffffff;
+  unsigned result;
+
+  uf=uf>>23;
+  exponent=uf&0xff;
+  sign=uf>>8;
+  if(!exponent)
+  { //exponent全为0, E=-127, M=0.XXX..XXX
+    if(fraction>>22)
+      exponent=1;
+    fraction = fraction << 1;
+  }
+  else if(!(~exponent&0xff)){ //exponent全1
+    return input;
+  }
+  else{
+    exponent=exponent+1;
+    if(!~exponent) fraction=0;
+  }
+  fraction = fraction & ~(1 << 23);
+  result = (sign << 31) + (exponent << 23) + fraction;
+  //printf("sign:%d  exp:%d  frac:%d \n", sign, exponent, fraction);
+  return result;
 }
 
 /* 
@@ -345,8 +375,39 @@ unsigned floatScale2(unsigned uf) {
  *   Max ops: 30
  *   Rating: 4
  */
+
+// Note: give up carry bit, no rounding
 int floatFloat2Int(unsigned uf) {
-  return 2;
+  unsigned sign;
+  unsigned exponent;
+  unsigned fraction = uf & 0x7fffff;
+  unsigned result=0;
+
+  uf = uf >> 23;
+  exponent = uf & 0xff;
+  sign = uf >> 8;
+  if(exponent<=125){ //(1)E<=-2;  (2)exponent==0时, E=-127, M=0.XXX..XXX
+    return 0;
+  }
+  else if(exponent>=158){ //E>=31
+    return 0x80000000u;
+  }
+  else if(exponent==126){//E=-1
+    return 0;
+  }
+  else{
+    result=fraction | 0x800000;
+    if(exponent<=150){ 
+      result=result>>(150-exponent);
+    }
+    else{
+      result=result<<(exponent-150);
+    }
+  }
+  if(sign){
+    result = ~result + 1;
+  }
+  return result;
 }
 
 /* 
@@ -362,6 +423,21 @@ int floatFloat2Int(unsigned uf) {
  *   Max ops: 30 
  *   Rating: 4
  */
-unsigned floatPower2(int x) {
-    return 2;
+unsigned floatPower2(int x)
+{
+  unsigned exponent = x + 127;
+  unsigned fraction = 0;
+  unsigned result;
+  if (x >= 128)
+    exponent = 0xff;
+  else if (x < -125)
+  { // E= -inf ~ -126
+    exponent = 0x00;
+    if (x >= -149)
+    { // 2^(-149)= 浮点1    fraction=0x000001
+      fraction = 1 << (x + 149);
+    }
+  }
+  result = (exponent << 23) + fraction;
+  return result;
 }
