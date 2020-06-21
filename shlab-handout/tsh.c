@@ -3,12 +3,7 @@
  * 
  * github:huangrt01   THU EE 
  */
-#include "csapp.h"
-#include <string.h>
-#include <ctype.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include "csapp.c"
 
 /* Misc manifest constants */
 #define MAXLINE    1024   /* max line size */
@@ -78,10 +73,7 @@ int pid2jid(pid_t pid);
 void listjobs(struct job_t *jobs);
 
 void usage(void);
-void unix_error(char *msg);
-void app_error(char *msg);
-typedef void handler_t(int);
-handler_t *Signal(int signum, handler_t *handler);
+
 
 /*
  * main - The shell's main routine 
@@ -459,39 +451,9 @@ void usage(void)
     exit(1);
 }
 
-/*
- * unix_error - unix-style error routine
- */
-void unix_error(char *msg)
-{
-    fprintf(stdout, "%s: %s\n", msg, strerror(errno));
-    exit(1);
-}
 
-/*
- * app_error - application-style error routine
- */
-void app_error(char *msg)
-{
-    fprintf(stdout, "%s\n", msg);
-    exit(1);
-}
 
-/*
- * Signal - wrapper for the sigaction function
- */
-handler_t *Signal(int signum, handler_t *handler) 
-{
-    struct sigaction action, old_action;
 
-    action.sa_handler = handler;  
-    sigemptyset(&action.sa_mask); /* block sigs of type being handled */
-    action.sa_flags = SA_RESTART; /* restart syscalls if possible */
-
-    if (sigaction(signum, &action, &old_action) < 0)
-	unix_error("Signal error");
-    return (old_action.sa_handler);
-}
 
 /*
  * sigquit_handler - The driver program can gracefully terminate the

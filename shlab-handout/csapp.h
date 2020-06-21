@@ -18,16 +18,22 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include <semaphore.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#ifdef __linux__
+#include <semaphore.h>
+#endif
 
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 /* $begin createmasks */
@@ -57,9 +63,10 @@ extern int h_errno;    /* Defined by BIND for DNS errors */
 extern char **environ; /* Defined by libc */
 
 /* Misc constants */
-#define MAXLINE 8192 /* Max text line length */
-#define MAXBUF 8192  /* Max I/O buffer size */
-#define LISTENQ 1024 /* Second argument to listen() */
+/* rename from XXX to XXX_Misc */
+#define MAXLINE_Misc 8192 /* Max text line length */
+#define MAXBUF_Misc 8192  /* Max I/O buffer size */
+#define LISTENQ_Misc 1024 /* Second argument to listen() */
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -168,10 +175,61 @@ void Pthread_exit(void *retval);
 pthread_t Pthread_self(void);
 void Pthread_once(pthread_once_t *once_control, void (*init_function)());
 
+#define Pthread_mutex_lock(m) assert(pthread_mutex_lock(m) == 0);
+#define Pthread_mutex_unlock(m) assert(pthread_mutex_unlock(m) == 0);
+#define Pthread_cond_signal(cond) assert(pthread_cond_signal(cond) == 0);
+#define Pthread_cond_wait(cond, mutex) assert(pthread_cond_wait(cond, mutex) == 0);
+
+#define Mutex_init(m) assert(pthread_mutex_init(m, NULL) == 0);
+#define Mutex_lock(m) assert(pthread_mutex_lock(m) == 0);
+#define Mutex_unlock(m) assert(pthread_mutex_unlock(m) == 0);
+#define Cond_init(cond) assert(pthread_cond_init(cond, NULL) == 0);
+#define Cond_signal(cond) assert(pthread_cond_signal(cond) == 0);
+#define Cond_wait(cond, mutex) assert(pthread_cond_wait(cond, mutex) == 0);
+
 /* POSIX semaphore wrappers */
+#ifdef __linux__
 void Sem_init(sem_t *sem, int pshared, unsigned int value);
-void P(sem_t *sem);
-void V(sem_t *sem);
+void P(sem_t *sem); //sem_wait
+void V(sem_t *sem); //sem_post
+#endif // __linux__
+
+#ifdef __APPLE__
+typedef struct __Zem_t
+{
+    int value;
+    pthread_cond_t cond;
+    pthread_mutex_t lock;
+} Zem_t;
+
+// only one thread can call this
+void Zem_init(Zem_t *s, int value)
+{
+    s->value = value;
+    Cond_init(&s->cond);
+    Mutex_init(&s->lock);
+}
+
+void Zem_wait(Zem_t *s)
+{
+    Mutex_lock(&s->lock);
+    while (s->value <= 0)
+        Cond_wait(&s->cond, &s->lock);
+    s->value--;
+    Mutex_unlock(&s->lock);
+}
+void Zem_post(Zem_t *s)
+{
+    Mutex_lock(&s->lock);
+    s->value++;
+    Cond_signal(&s->cond);
+    Mutex_unlock(&s->lock);
+}
+typedef Zem_t sem_t;
+#define Sem_init(x, y) Zem_init(x, y)
+#define P(x) Zem_wait(x)
+#define V(x) Zem_post(x)
+#endif
 
 /* Rio (Robust I/O) package */
 ssize_t rio_readn(int fd, void *usrbuf, size_t n);

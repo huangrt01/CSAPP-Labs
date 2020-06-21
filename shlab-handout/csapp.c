@@ -398,6 +398,25 @@ void Fstat(int fd, struct stat *buf)
 }
 
 /*********************************
+ * Wrappers for time function
+ *********************************/
+
+double GetTime()
+{
+    struct timeval t;
+    int rc = gettimeofday(&t, NULL);
+    assert(rc == 0);
+    return (double)t.tv_sec + (double)t.tv_usec / 1e6;
+}
+
+void Spin(int howlong)
+{
+    double t = GetTime();
+    while ((GetTime() - t) < (double)howlong)
+        ; // do nothing in loop
+}
+
+/*********************************
  * Wrappers for directory function
  *********************************/
 
@@ -1062,7 +1081,7 @@ int open_listenfd(char *port)
         return -1;
 
     /* Make it a listening socket ready to accept connection requests */
-    if (listen(listenfd, LISTENQ) < 0)
+    if (listen(listenfd, LISTENQ_Misc) < 0)
     {
         close(listenfd);
         return -1;
