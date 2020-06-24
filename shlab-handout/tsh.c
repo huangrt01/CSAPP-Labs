@@ -42,7 +42,7 @@ struct job_t {              /* The job struct */
     char cmdline[MAXLINE];  /* command line */
 };
 struct job_t jobs[MAXJOBS]; /* The job list */
-volatile sig_atomic_t fg_cur;
+volatile sig_atomic_t fg_pid;
 /* End global variables */
 
 
@@ -52,7 +52,7 @@ volatile sig_atomic_t fg_cur;
 void eval(char *cmdline);
 int builtin_cmd(char **argv);
 void do_bgfg(char **argv);
-void waitfg(pid_t pid);
+void waitfg(pid_t pid,sigset_t prev_mask);
 
 void sigchld_handler(int sig);
 void sigtstp_handler(int sig);
@@ -166,8 +166,7 @@ void eval(char *cmdline)
         return; //Ignore empty lines
                 //sigprocmask
     
-    if(!builtin_cmd(argv)){
-        //pathname of an execuatble file
+    if(!builtin_cmd(argv)){ //pathname of an execuatble file
         sigset_t mask_chld, prev_mask, mask_all;
         Sigemptyset(&mask_chld);
         Sigaddset(&mask_chld, SIGCHLD);
@@ -180,6 +179,7 @@ void eval(char *cmdline)
         pid = Fork();
         if (pid == 0)       //child runs user job
         {
+            //restore the prev_mask
             Sigprocmask(SIG_SETMASK,&prev_mask,NULL);
             //puts the child in a new process group whose group ID is identical to the child’s PID
             setpgid(0, 0);
@@ -189,19 +189,20 @@ void eval(char *cmdline)
             exit(0);
         }
 
+        //before manipulating the global variables, mask all the possible signals
+        Sigprocmask(SIG_BLOCK,&mask_all,NULL);
         addjob(jobs,pid,bg+1,cmdline);
 
-        /* Restore previous blocked set, unblocking SIGCHLD */
-        Sigprocmask(SIG_SETMASK,&prev_mask,NULL);
-
         if(!bg){    
-            waitfg(pid);
+            waitfg(pid,prev_mask);
         }
         else{
             printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);
+            // 这行是否需要换行？如果加\n，输出多了一行；如果不加，神奇地符合要求，prompt自动换行了，不知道这是为什么?
             fflush(stdout);
         }
-            
+        /* Restore previous blocked set, unblocking SIGCHLD */
+        Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
     }
     return;
 }
@@ -295,13 +296,19 @@ void do_bgfg(char **argv)
 /* 
  * waitfg - Block until process pid is no longer the foreground process
  */
-void waitfg(pid_t pid)
+void waitfg(pid_t pid,sigset_t prev_mask)
 {
-    //busy loop around the sleep function
-    while(1){
-        sleep(1);
+    fg_pid=pid;
+    //spin loop
+    while(fg_pid){
+        Sigsuspend(&prev_mask);
+        //more efficient than sleep
     }
-
+    if(verbose){
+        Sio_puts("waitfg: Process (");
+        Sio_putl(pid);
+        Sio_puts(") no longer the fg process\n");
+    }
     return;
 }
 
@@ -320,35 +327,44 @@ void sigchld_handler(int sig)
 {
     int old_errno=errno;
     pid_t pid;
+    int jid;
     int status;
     if(verbose)
         Sio_puts("sigchld_handler: entering\n");
-    while(1){
-        pid=waitpid(-1,&status,WNOHANG|WUNTRACED);
-        if(pid<=0)
-            break;
-        if(verbose)
+
+    sigset_t prev_mask, mask_all;
+    Sigfillset(&mask_all);
+
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED))>0){    //Reap a zombie child
+        Sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+        jid = pid2jid(pid);
+        if(verbose){
             Sio_puts("sigchld_handler: ");
+        }
+        if(fg_pid==pid) fg_pid=0;
         deletejob(jobs, pid);
-    } 
-
-    //WIFEXITED(status);
-
-    if(errno!=ECHILD)
-        Sio_error("waitpid error");
+        if(WIFEXITED(status)){
+            if(verbose){
+                Sio_puts("sigchld_handler: Job [");
+                Sio_putl(jid);
+                Sio_puts("] (");
+                Sio_putl(pid);
+                Sio_puts(") terminates OK (status ");
+                Sio_putl(WEXITSTATUS(status));
+                Sio_puts(")\n");
+            }
+        }
+        Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    }
     
-    
-    // if (gpid == getpgrp())
-    // {
-    //     Sio_puts("Job [");
-    //     Sio_putl(gpid);
-    //     Sio_puts("] (");
-    //     Sio_putl(getpid());
-    //     Sio_puts("terminated by signal 2\n"); //Safe output
-    //     _exit(0);                             //Safe exit
-    // }
 
-    errno=old_errno;
+    // at this time, error can be EINTR
+    if(errno!=ECHILD && errno!=EINTR)
+        sio_error("waitpid error\n"); //Sio
+    
+    if(verbose)
+        Sio_puts("sigchld_handler: exiting\n");
+    errno = old_errno;
     return;
 }
 
@@ -365,9 +381,9 @@ void sigint_handler(int sig)
     pid_t gpid ;
     
     //Protect accesses to shared global data structures by blocking all signals
-    sigset_t mask, prev_mask;
-    Sigfillset(&mask);
-    Sigprocmask(SIG_BLOCK, &mask, &prev_mask);
+    sigset_t mask_all, prev_mask;
+    Sigfillset(&mask_all);
+    Sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
     if ((gpid = fgpid(jobs))){
         Sio_putl(gpid);
         Sio_puts("Caught SIGINT!\n");
@@ -393,9 +409,9 @@ void sigtstp_handler(int sig)
     pid_t gpid;
 
     //Protect accesses to shared global data structures by blocking all signals
-    sigset_t mask, prev_mask;
-    Sigfillset(&mask);
-    Sigprocmask(SIG_BLOCK, &mask, &prev_mask);
+    sigset_t mask_all, prev_mask;
+    Sigfillset(&mask_all);
+    Sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
     if((gpid = fgpid(jobs))){
         Sio_putl(gpid);
         Sio_puts("Caught SIGTSTP!\n");
@@ -460,13 +476,13 @@ int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline)
                 nextjid = 1;
             strcpy(jobs[i].cmdline, cmdline);
             if(verbose){
-                printf("Added job [%d] %d %s\n", jobs[i].jid, jobs[i].pid, jobs[i].cmdline);
+                printf("Added job [%d] %d %s\n\r", jobs[i].jid, jobs[i].pid, jobs[i].cmdline);
             }
             fflush(stdout); // 这句如果不加，会影响对shell进程的理解
             return 1;
         }
     }
-    printf("Tried to create too many jobs\n");
+    printf("Tried to create too many jobs\n\r");
     fflush(stdout);
     return 0;
 }
@@ -486,7 +502,7 @@ int deletejob(struct job_t *jobs, pid_t pid)
                 Sio_putl(jobs[i].jid);
                 Sio_puts("] (");
                 Sio_putl(jobs[i].pid);
-                Sio_puts(") deleted\n");
+                Sio_puts(") deleted\n\r");
             }
             clearjob(&jobs[i]);
             nextjid = maxjid(jobs)+1;
@@ -604,7 +620,7 @@ void usage(void)
  */
 void sigquit_handler(int sig)  
 {
-    printf("Terminating after receipt of SIGQUIT signal\n");
+    printf("Terminating after receipt of SIGQUIT signal\n\r");
     fflush(stdout);
     exit(1);
 }
