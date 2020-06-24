@@ -6,7 +6,7 @@
 #define __CSAPP_H__
 
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h>     //exit()
 #include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
@@ -15,8 +15,8 @@
 #include <signal.h>
 #include <dirent.h>
 #include <sys/time.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <sys/types.h>   //pid_t = int
+#include <sys/wait.h>    //WNOHANG
 #include <sys/stat.h>
 #include <assert.h>
 #include <fcntl.h>

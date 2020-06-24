@@ -1,5 +1,8 @@
 /* 
  * csapp.c - Functions for the CS:APP3e book
+ * 
+ * Updated 6/2020 huangrt01:
+ *   - My personalized function wrappers
  *
  * Updated 10/2016 reb:
  *   - Fixed bug in sio_ltoa that didn't cover negative numbers
