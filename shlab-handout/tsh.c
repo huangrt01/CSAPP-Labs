@@ -235,13 +235,19 @@ int parseline(const char *cmdline, char **argv, int *argc)
     }
     else {
         delim = strchr(buf, ' ');
+        char *delim_tab = strchr(buf, '\t');
+        if (delim && delim_tab)
+            delim = (delim < delim_tab) ? delim : delim_tab;
+        else if (delim_tab)
+            delim = delim_tab;
     }
 
     while (delim) {
+        printf("buf:%s\n",buf);
         argv[(*argc)++] = buf;
         *delim = '\0';
         buf = delim + 1;
-        while (*buf && (*buf == ' ')) /* ignore spaces */
+        while (*buf && ((*buf == ' ')||(*buf == '\t'))) /* ignore spaces and tabs */
             buf++;
 
         if (*buf == '\'') {
@@ -250,6 +256,11 @@ int parseline(const char *cmdline, char **argv, int *argc)
         }
         else {
             delim = strchr(buf, ' ');
+            char *delim_tab = strchr(buf, '\t');
+            if (delim && delim_tab)
+                delim = (delim < delim_tab) ? delim : delim_tab;
+            else if (delim_tab)
+                delim = delim_tab;
         }
     }
     argv[*argc] = NULL;
@@ -300,13 +311,10 @@ void do_bgfg(char **argv, int argc)
     int cur_jid=0;
     pid_t cur_pid=0;
     struct job_t *cur_job;
-
     char *para=argv[1];
 
     sigset_t prev_mask, mask_all;
     Sigfillset(&mask_all);
-
-    
 
     if(para[0]=='%'){
         // input is jid
@@ -726,10 +734,6 @@ void usage(void)
     printf("   -p   do not emit a command prompt\n");
     exit(1);
 }
-
-
-
-
 
 /*
  * sigquit_handler - The driver program can gracefully terminate the
