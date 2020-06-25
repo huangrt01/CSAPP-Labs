@@ -2,6 +2,20 @@
  * tsh - A tiny shell program with job control
  * 
  * github:huangrt01   THU EE 
+ * 
+ * remaining tasks: https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell
+ * 
+ * -------------------------
+ * wrong shell input
+ * To parse the input line into constituent pieces, you might want to use strsep(). Read the man page (carefully) for more details.
+ * cd
+ * path
+ * batch mode
+ * path
+ * redirection
+ * parallel commands
+ * -------------------------
+ * 
  */
 #include "csapp.c"
 
@@ -88,7 +102,8 @@ int main(int argc, char **argv)
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     /* 1 represents stdout, 2 represents stderr*/
-    dup2(1, 2);
+    dup2(STDOUT_FILENO,STDERR_FILENO);
+    //dup2(1, 2);
 
     /* Parse the command line */
     while ((c = getopt(argc, argv, "hvp")) != EOF) {
@@ -243,7 +258,6 @@ int parseline(const char *cmdline, char **argv, int *argc)
     }
 
     while (delim) {
-        printf("buf:%s\n",buf);
         argv[(*argc)++] = buf;
         *delim = '\0';
         buf = delim + 1;
@@ -281,7 +295,7 @@ int parseline(const char *cmdline, char **argv, int *argc)
  */
 int builtin_cmd(char **argv, int argc) 
 {
-    if(!strcmp(argv[0],"quit"))     //quit command
+    if(!strcmp(argv[0],"quit")||!strcmp(argv[0],"exit"))     //quit and exit command
         exit(0);
     if(!strcmp(argv[0],"&"))        //ignore Singleton &
         return 1;
