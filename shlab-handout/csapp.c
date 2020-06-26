@@ -529,10 +529,27 @@ char *Fgets(char *ptr, int n, FILE *stream)
 {
     char *rptr;
 
-    if (((rptr = fgets(ptr, n, stream)) == NULL) && ferror(stream))
+    if (((rptr = my_fgets(ptr, n, stream)) == NULL) && ferror(stream))
         app_error("Fgets error");
 
     return rptr;
+}
+char *my_fgets(char *ptr, int n, FILE *stream)
+{
+    register int c; 
+    register char *cs;
+    cs = ptr;
+
+    while (--n > 0 && (c = getc(stream)) != EOF)
+    {
+        if ((*cs++ = c) == '\n')
+        {
+            break;
+        }
+    }
+
+    *cs = '\0';
+    return (c == EOF && cs == ptr) ? NULL : ptr;
 }
 
 FILE *Fopen(const char *filename, const char *mode)
