@@ -539,15 +539,16 @@ char *my_fgets(char *ptr, int n, FILE *stream)
     register int c; 
     register char *cs;
     cs = ptr;
-
     while (--n > 0 && (c = getc(stream)) != EOF)
     {
+      //  printf("feof:%d, ferror:%d, ftell:%d\n", feof(stream), ferror(stream),ftell(stream));
+      //  fprintf(stderr, "ftell errno: %s\n", strerror(errno));
         if ((*cs++ = c) == '\n')
         {
             break;
         }
     }
-
+    
     *cs = '\0';
     return (c == EOF && cs == ptr) ? NULL : ptr;
 }

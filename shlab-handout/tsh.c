@@ -49,8 +49,6 @@ int verbose = 0;            /* if true, print additional output */
 int nextjid = 1;            /* next job ID to allocate */
 char sbuf[MAXLINE];         /* for composing sprintf messages */
 
-char cmdline[MAXLINE];
-FILE *IN;
 struct job_t {              /* The job struct */
     pid_t pid;              /* job PID */
     int jid;                /* job ID [1, 2, ...] */
@@ -77,9 +75,31 @@ void sigint_handler(int sig);
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, char **argv, int *argc); 
 void sigquit_handler(int sig);
-void Exit(int status);
+void readtoMem(char ***pwd, char *path)
+{
 
-void clearjob(struct job_t *job);
+    FILE *fp = Fopen(path, "rb");
+    //得到文件有几行
+    int lineCount=0;
+    char buf[MAXLINE];
+    while (Fgets(buf, MAXLINE, fp))
+    {
+        lineCount++;
+    }
+    rewind(fp); //重新返回文件开头
+    *pwd = (char **)Malloc((lineCount + 1) * sizeof(char *));
+    char **t = *pwd;
+    while (fgets(buf, MAXLINE, fp))
+    {
+        int n = strlen(buf);
+        *t = (char *)Malloc((n + 1) * sizeof(char *));
+        strcpy(*t, buf);
+        t++;
+    }
+    t = NULL;
+    Fclose(fp);
+}                                                                                                                                       void
+                                                                                                                                                  clearjob(struct job_t *job);
 void initjobs(struct job_t *jobs);
 int maxjid(struct job_t *jobs); 
 int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline);
@@ -100,20 +120,27 @@ int main(int argc, char **argv)
 {
     char c;
     int emit_prompt = 1; /* emit prompt (default) */
+    int batch_mode = 0; /* batch mode */
 
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     /* 1 represents stdout, 2 represents stderr*/
     dup2(STDOUT_FILENO,STDERR_FILENO);
     //dup2(1, 2);
-    IN = stdin;
+    FILE *IN = stdin;
+    char **input_file=NULL;
 
     /* Parse the command line */
     while ((c = getopt(argc, argv, "b:hvp")) != EOF) {
         switch (c) {
             case 'b':             /* batch mode */
+                batch_mode = 1;
                 emit_prompt = 0;
-                IN = Fopen(optarg, "r");
+
+                //IN=Fopen(optarg,"rb"); //debug
+
+                printf("%s",optarg);
+                readtoMem(&input_file, optarg);
                 break;
             case 'h':             /* print help message */
                 usage();
@@ -129,6 +156,8 @@ int main(int argc, char **argv)
         }
     }
     
+    
+    
 
     /* Install the signal handlers */
 
@@ -143,6 +172,7 @@ int main(int argc, char **argv)
     /* Initialize the job list */
     initjobs(jobs);
 
+    char cmdline[MAXLINE];
     /* Execute the shell's read/eval loop */
     while(1){
         /* Read command line */
@@ -150,24 +180,30 @@ int main(int argc, char **argv)
             printf("%s", prompt);
             fflush(stdout);
         }
-        Fgets(cmdline,MAXLINE,IN);
-        int k=ftell(IN);
-        printf("%d",k);
-        if (ferror(IN) || feof(IN)) /* feof(IN): End of file (ctrl-d) */
-            break;
-
-      //  printf("%s", cmdline);        
+        if(!batch_mode){ 
+            Fgets(cmdline, MAXLINE, IN);
+            if (ferror(IN) || feof(IN)) /* feof(IN): End of file (ctrl-d) */
+                break;
+        }
+        else{
+            if(!*input_file) break;
+            strcpy(cmdline,*input_file++);
+        }
+        printf("%s", cmdline);        
 
         /* Evaluate the command line */
-        cmdline[strlen(cmdline)-1]='\n';
-        eval(cmdline);
+        if(strlen(cmdline)>1){
+            cmdline[strlen(cmdline) - 1] = '\n';
+            eval(cmdline);
+        }
         fflush(stdout);
         fflush(stdout);
         
     } 
 
     fflush(stdout);
-    Exit(0); /* control never reaches here */
+    Fclose(IN);
+    exit(0); 
 }
   
 /* 
@@ -214,7 +250,7 @@ void eval(char *cmdline)
             //run the job
             Execve(argv[0],argv,environ);
             //这个要加，防止execve失败
-            Exit(0);
+            exit(0);
         }
 
         //before manipulating the global variables, mask all the possible signals
@@ -308,7 +344,7 @@ int parseline(const char *cmdline, char **argv, int *argc)
 int builtin_cmd(char **argv, int argc) 
 {
     if(!strcmp(argv[0],"quit")||!strcmp(argv[0],"exit"))     //quit and exit command
-        Exit(0);
+        exit(0);
     if(!strcmp(argv[0],"&"))        //ignore Singleton &
         return 1;
     if(!strcmp(argv[0],"jobs")){
@@ -495,9 +531,9 @@ void sigchld_handler(int sig)
     }
     
 
-    // at this time, error can be EINTR
-    if(errno!=ECHILD && errno!=EINTR)
-        sio_error("waitpid error\n"); //Sio
+    // at this time, error can be EINTR / success
+    if(errno!=ECHILD && errno!=EINTR && errno != 0)
+        unix_error("waitpid error\n"); //Sio
     
     if(verbose)
         Sio_puts("sigchld_handler: exiting\n");
@@ -758,7 +794,7 @@ void usage(void)
     printf("   -h   print this message\n");
     printf("   -v   print additional diagnostic information\n");
     printf("   -p   do not emit a command prompt\n");
-    Exit(1);
+    exit(1);
 }
 
 /*
@@ -770,14 +806,9 @@ void sigquit_handler(int sig)
 {
     printf("Terminating after receipt of SIGQUIT signal\n\r");
     fflush(stdout);
-    Exit(1);
+    exit(1);
 }
 
 
-void Exit(int status){
-    if(IN!=stdin)
-        Fclose(IN);
-    exit(status);
-}
 
 
