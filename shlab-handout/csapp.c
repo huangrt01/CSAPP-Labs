@@ -553,6 +553,30 @@ char *my_fgets(char *ptr, int n, FILE *stream)
     return (c == EOF && cs == ptr) ? NULL : ptr;
 }
 
+void readtoMem(char ***pwd, char *path, int MAXLINE)
+{
+    FILE *fp = Fopen(path, "rb");
+    //得到文件有几行
+    int lineCount = 0;
+    char buf[MAXLINE];
+    while (Fgets(buf, MAXLINE, fp))
+    {
+        lineCount++;
+    }
+    rewind(fp); //重新返回文件开头
+    *pwd = (char **)Malloc((lineCount + 1) * sizeof(char *));
+    char **t = *pwd;
+    while (fgets(buf, MAXLINE, fp))
+    {
+        int n = strlen(buf);
+        *t = (char *)Malloc((n + 1) * sizeof(char *));
+        strcpy(*t, buf);
+        t++;
+    }
+    t = NULL;
+    Fclose(fp);
+}
+
 FILE *Fopen(const char *filename, const char *mode)
 {
     FILE *fp;

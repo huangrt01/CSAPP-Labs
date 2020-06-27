@@ -6,11 +6,8 @@
  * remaining tasks: https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell
  * 
  * -------------------------
- * wrong shell input
  * To parse the input line into constituent pieces, you might want to use strsep(). Read the man page (carefully) for more details.
  * cd
- * path
- * batch mode
  * path
  * redirection
  * parallel commands
@@ -75,31 +72,8 @@ void sigint_handler(int sig);
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, char **argv, int *argc); 
 void sigquit_handler(int sig);
-void readtoMem(char ***pwd, char *path)
-{
 
-    FILE *fp = Fopen(path, "rb");
-    //得到文件有几行
-    int lineCount=0;
-    char buf[MAXLINE];
-    while (Fgets(buf, MAXLINE, fp))
-    {
-        lineCount++;
-    }
-    rewind(fp); //重新返回文件开头
-    *pwd = (char **)Malloc((lineCount + 1) * sizeof(char *));
-    char **t = *pwd;
-    while (fgets(buf, MAXLINE, fp))
-    {
-        int n = strlen(buf);
-        *t = (char *)Malloc((n + 1) * sizeof(char *));
-        strcpy(*t, buf);
-        t++;
-    }
-    t = NULL;
-    Fclose(fp);
-}                                                                                                                                       void
-                                                                                                                                                  clearjob(struct job_t *job);
+void clearjob(struct job_t *job);
 void initjobs(struct job_t *jobs);
 int maxjid(struct job_t *jobs); 
 int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline);
@@ -139,8 +113,7 @@ int main(int argc, char **argv)
 
                 //IN=Fopen(optarg,"rb"); //debug
 
-                printf("%s",optarg);
-                readtoMem(&input_file, optarg);
+                readtoMem(&input_file, optarg,MAXLINE);
                 break;
             case 'h':             /* print help message */
                 usage();
@@ -155,9 +128,9 @@ int main(int argc, char **argv)
                 usage();
         }
     }
-    
-    
-    
+    if(argc-optind>0)       /* wrong shell input*/
+        usage();
+
 
     /* Install the signal handlers */
 
@@ -188,9 +161,8 @@ int main(int argc, char **argv)
         else{
             if(!*input_file) break;
             strcpy(cmdline,*input_file++);
-        }
-        printf("%s", cmdline);        
-
+        }    
+        if(verbose && batch_mode ) printf("Evaluating cmdline:%s\n",cmdline);
         /* Evaluate the command line */
         if(strlen(cmdline)>1){
             cmdline[strlen(cmdline) - 1] = '\n';
@@ -790,7 +762,8 @@ void listjobs(struct job_t *jobs)
  */
 void usage(void) 
 {
-    printf("Usage: shell [-hvp]\n");
+    printf("Usage: shell [-bhvp]\n");
+    printf("   -b   batch mode, -b batch_file\n");
     printf("   -h   print this message\n");
     printf("   -v   print additional diagnostic information\n");
     printf("   -p   do not emit a command prompt\n");

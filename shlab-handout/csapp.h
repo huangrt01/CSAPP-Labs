@@ -134,6 +134,7 @@ void Fclose(FILE *fp);
 FILE *Fdopen(int fd, const char *type);
 char *Fgets(char *ptr, int n, FILE *stream);
 char *my_fgets(char *ptr,int n, FILE *stream);
+void readtoMem(char ***pwd, char *path, int MAXLINE);
 FILE *Fopen(const char *filename, const char *mode);
 void Fputs(const char *ptr, FILE *stream);
 size_t Fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
