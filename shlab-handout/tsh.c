@@ -137,10 +137,10 @@ int main(int argc, char **argv)
                 batch_mode = 1;
                 emit_prompt = 0;
 
-                //IN=Fopen(optarg,"rb"); //debug
+                IN=Fopen(optarg,"rb"); //debug
 
                 printf("%s",optarg);
-                readtoMem(&input_file, optarg);
+                //readtoMem(&input_file, optarg);
                 break;
             case 'h':             /* print help message */
                 usage();
@@ -180,15 +180,9 @@ int main(int argc, char **argv)
             printf("%s", prompt);
             fflush(stdout);
         }
-        if(!batch_mode){ 
-            Fgets(cmdline, MAXLINE, IN);
-            if (ferror(IN) || feof(IN)) /* feof(IN): End of file (ctrl-d) */
-                break;
-        }
-        else{
-            if(!*input_file) break;
-            strcpy(cmdline,*input_file++);
-        }
+        Fgets(cmdline, MAXLINE, IN);
+        if (ferror(IN) || feof(IN)) /* feof(IN): End of file (ctrl-d) */
+            break;
         printf("%s", cmdline);        
 
         /* Evaluate the command line */
