@@ -443,6 +443,14 @@ struct dirent *Readdir(DIR *dirp)
     return dep;
 }
 
+int Chdir(const char *path){
+    int rc;
+
+    if((rc=chdir(path)) < 0)
+        unix_error("chdir error");
+    return rc;
+}
+
 int Closedir(DIR *dirp)
 {
     int rc;
@@ -450,6 +458,14 @@ int Closedir(DIR *dirp)
     if ((rc = closedir(dirp)) < 0)
         unix_error("closedir error");
     return rc;
+}
+
+char* Getcwd(char *buf, size_t size){
+    char * dep;
+    dep = getcwd(buf,size);
+    if((dep == NULL) && (errno != 0))
+        unix_error("getcwd error");
+    return dep;
 }
 
 /***************************************

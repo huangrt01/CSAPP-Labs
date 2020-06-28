@@ -6,8 +6,6 @@
  * remaining tasks: https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell
  * 
  * -------------------------
- * To parse the input line into constituent pieces, you might want to use strsep(). Read the man page (carefully) for more details.
- * cd
  * path
  * redirection
  * parallel commands
@@ -317,17 +315,34 @@ int builtin_cmd(char **argv, int argc)
 {
     if(!strcmp(argv[0],"quit")||!strcmp(argv[0],"exit"))     //quit and exit command
         exit(0);
-    if(!strcmp(argv[0],"&"))        //ignore Singleton &
+    else if(!strcmp(argv[0],"cd")){
+        if(argc==2){
+            Chdir(argv[1]);
+        }
+        else
+            printf("cd command requires 1 argument");
+    }
+    else if(!strcmp(argv[0],"pwd")){
+        if(argc==1){
+            char temp[MAXLINE];
+            Getcwd(temp,MAXLINE);
+            printf("%s\n",temp);
+        }
+        else
+            printf("pwd command requires no argument");
+    }
+    else if(!strcmp(argv[0],"&"))        //ignore Singleton &
         return 1;
-    if(!strcmp(argv[0],"jobs")){
+    else if(!strcmp(argv[0],"jobs")){
         listjobs(jobs);
-        return 1;
     }
-    if(!strcmp(argv[0],"bg")||!strcmp(argv[0],"fg")){
+    else if(!strcmp(argv[0],"bg")||!strcmp(argv[0],"fg")){
         do_bgfg(argv,argc);
-        return 1;
     }
-    return 0;     /* not a builtin command */
+    else
+        return 0;     /* not a builtin command */
+    fflush(stdout);
+    return 1;
 }
 
 /* 
