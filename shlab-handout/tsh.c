@@ -3,8 +3,6 @@
  * 
  * github:huangrt01   THU EE 
  * 
- * remaining tasks: https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell
- * 
  * -------------------------
  * path
  * redirection
@@ -69,6 +67,7 @@ void sigint_handler(int sig);
 
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, char **argv, int *argc); 
+void redirect(FILE *out);
 void sigquit_handler(int sig);
 
 void clearjob(struct job_t *job);
@@ -97,7 +96,7 @@ int main(int argc, char **argv)
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     /* 1 represents stdout, 2 represents stderr*/
-    dup2(STDOUT_FILENO,STDERR_FILENO);
+    Dup2(STDOUT_FILENO,STDERR_FILENO);
     //dup2(1, 2);
     FILE *IN = stdin;
     char **input_file=NULL;
@@ -108,9 +107,6 @@ int main(int argc, char **argv)
             case 'b':             /* batch mode */
                 batch_mode = 1;
                 emit_prompt = 0;
-
-                //IN=Fopen(optarg,"rb"); //debug
-
                 readtoMem(&input_file, optarg,MAXLINE);
                 break;
             case 'h':             /* print help message */
@@ -194,12 +190,24 @@ void eval(char *cmdline)
     char buf[MAXLINE];   //Holds modified command line
     int bg;               //Should the job run in bg or fg?
     pid_t pid;            //Process id
+    FILE *OUT=stdout;            //Output file
 
     strcpy(buf,cmdline);
     bg=parseline(buf,argv,&argc);
     if(argv[0]==NULL)
         return; //Ignore empty lines
-    
+    if(argc>=3){
+        if(!strcmp(argv[argc-2],">")){
+            OUT = Fopen(argv[argc-1],"w");
+            argc-=2;
+            argv[argc]=NULL;
+        }
+        else if(!strcmp(argv[argc-2],">>")){
+            OUT = Fopen(argv[argc-1],"a");
+            argc-=2;
+            argv[argc]=NULL;
+        }
+    }
     if(!builtin_cmd(argv,argc)){ //pathname of an execuatble file
         sigset_t mask_chld, prev_mask, mask_all;
         Sigemptyset(&mask_chld);
@@ -217,6 +225,8 @@ void eval(char *cmdline)
             Sigprocmask(SIG_SETMASK,&prev_mask,NULL);
             //puts the child in a new process group whose group ID is identical to the child’s PID
             setpgid(0, 0);
+            //redirection
+            redirect(OUT);
             //run the job
             Execve(argv[0],argv,environ);
             //这个要加，防止execve失败
@@ -307,6 +317,25 @@ int parseline(const char *cmdline, char **argv, int *argc)
     return bg;
 }
 
+
+/*
+ * redirect - redirect the output from STDOUT to FILE * OUT
+ * 
+ */
+void redirect(FILE *out){
+    int outFileNo;
+    if((outFileNo = fileno(out)) == -1){
+        printf("redirection failed\n");
+        fflush(stdout);
+        return;
+    }
+    if(outFileNo != STDOUT_FILENO){
+        Dup2(outFileNo, STDOUT_FILENO);
+        Dup2(outFileNo, STDERR_FILENO);
+        Fclose(out);
+    }
+}
+
 /* 
  * builtin_cmd - If the user has typed a built-in command then execute
  *    it immediately.  
@@ -320,7 +349,7 @@ int builtin_cmd(char **argv, int argc)
             Chdir(argv[1]);
         }
         else
-            printf("cd command requires 1 argument");
+            printf("cd command requires 1 argument\n");
     }
     else if(!strcmp(argv[0],"pwd")){
         if(argc==1){
@@ -329,7 +358,7 @@ int builtin_cmd(char **argv, int argc)
             printf("%s\n",temp);
         }
         else
-            printf("pwd command requires no argument");
+            printf("pwd command requires no argument\n");
     }
     else if(!strcmp(argv[0],"&"))        //ignore Singleton &
         return 1;
