@@ -4,8 +4,6 @@
  * github:huangrt01   THU EE 
  * 
  * -------------------------
- * path
- * redirection
  * parallel commands
  * -------------------------
  * 
@@ -17,6 +15,7 @@
 #define MAXARGS     128   /* max args on a command line */
 #define MAXJOBS      16   /* max jobs at any point in time */
 #define MAXJID    1<<16   /* max job ID */
+#define MAXPATH      64
 
 /* Job states */
 #define UNDEF 0 /* undefined */
@@ -41,6 +40,7 @@ char prompt[] = "tsh> ";    /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;            /* if true, print additional output */
 int nextjid = 1;            /* next job ID to allocate */
 char sbuf[MAXLINE];         /* for composing sprintf messages */
+char *paths[MAXPATH] = {"/bin", NULL};    /* max path number */
 
 struct job_t {              /* The job struct */
     pid_t pid;              /* job PID */
@@ -158,8 +158,11 @@ int main(int argc, char **argv)
         }    
         if(verbose && batch_mode ) printf("Evaluating cmdline:%s\n",cmdline);
         /* Evaluate the command line */
-        if(strlen(cmdline)>1){
-            cmdline[strlen(cmdline) - 1] = '\n';
+        if(strlen(cmdline)>1 ){
+            if (cmdline[strlen(cmdline) - 1] != '\n'){
+                cmdline[strlen(cmdline)] = '\n';
+                cmdline[strlen(cmdline)] = '\0';
+            }
             eval(cmdline);
         }
         fflush(stdout);
@@ -317,6 +320,27 @@ int parseline(const char *cmdline, char **argv, int *argc)
     return bg;
 }
 
+/*
+ * searchpath - search file in the paths
+ * 
+ * 
+ */
+int searchpath(char **file){
+    int i=0;
+    char path[MAXLINE];
+    while(paths[i]){
+        snprintf(path,MAXLINE,"%s/%s",paths[i],*file);
+        if(access(path,X_OK)==0){
+            *file = (char *)Malloc(MAXLINE);
+            strcpy(*file,path);
+            return 0;
+        }
+        i++;
+    }
+    return -1;
+}
+
+
 
 /*
  * redirect - redirect the output from STDOUT to FILE * OUT
@@ -368,6 +392,16 @@ int builtin_cmd(char **argv, int argc)
     else if(!strcmp(argv[0],"bg")||!strcmp(argv[0],"fg")){
         do_bgfg(argv,argc);
     }
+    else if(!strcmp(argv[0],"path")){
+        paths[0]=NULL;
+        size_t i;
+        for(i=0;i<argc-1;i++){
+            paths[i]=strdup(argv[i+1]);
+        }
+        paths[i+1]=NULL;
+    }
+    else if(!searchpath(&argv[0]))
+        return 0;
     else
         return 0;     /* not a builtin command */
     fflush(stdout);
