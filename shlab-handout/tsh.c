@@ -52,12 +52,21 @@ struct job_t jobs[MAXJOBS]; /* The job list */
 volatile sig_atomic_t fg_pid;
 /* End global variables */
 
+struct function_args
+{
+    pthread_t thread;
+    char **argv;
+    int argc;
+    FILE* out;
+    sigset_t prev_mask;
+};
 
 /* Function prototypes */
 
 /* Here are the functions that you will implement */
 void eval(char *cmdline);
-int builtin_cmd(char **argv,int argc);
+int builtin_cmd(char **argv, int argc);
+void executable(char **argv, int argc, char *cmdline, FILE *OUT, int bg);
 void do_bgfg(char **argv, int argc);
 void waitfg(pid_t pid,sigset_t prev_mask);
 
@@ -155,6 +164,7 @@ int main(int argc, char **argv)
         else{
             if(!*input_file) break;
             strcpy(cmdline,*input_file++);
+            free(*input_file-1);
         }    
         if(verbose && batch_mode ) printf("Evaluating cmdline:%s\n",cmdline);
         /* Evaluate the command line */
@@ -192,7 +202,6 @@ void eval(char *cmdline)
     int argc;
     char buf[MAXLINE];   //Holds modified command line
     int bg;               //Should the job run in bg or fg?
-    pid_t pid;            //Process id
     FILE *OUT=stdout;            //Output file
 
     strcpy(buf,cmdline);
@@ -212,44 +221,7 @@ void eval(char *cmdline)
         }
     }
     if(!builtin_cmd(argv,argc)){ //pathname of an execuatble file
-        sigset_t mask_chld, prev_mask, mask_all;
-        Sigemptyset(&mask_chld);
-        Sigaddset(&mask_chld, SIGCHLD);
-        Sigfillset(&mask_all);
-
-        /* Block SIGCHLD to prevent the race condition where the child is reaped by sigchld handler
-            (and thus removed from the job list) before the parent calls addjob. */
-        Sigprocmask(SIG_BLOCK,&mask_chld,&prev_mask);
-
-        pid = Fork();
-        if (pid == 0)       //child runs user job
-        {
-            //restore the prev_mask
-            Sigprocmask(SIG_SETMASK,&prev_mask,NULL);
-            //puts the child in a new process group whose group ID is identical to the child’s PID
-            setpgid(0, 0);
-            //redirection
-            redirect(OUT);
-            //run the job
-            Execve(argv[0],argv,environ);
-            //这个要加，防止execve失败
-            exit(0);
-        }
-
-        //before manipulating the global variables, mask all the possible signals
-        Sigprocmask(SIG_BLOCK,&mask_all,NULL);
-        addjob(jobs,pid,bg+1,cmdline);
-
-        if(!bg){    
-            waitfg(pid,prev_mask);
-        }
-        else{
-            printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);
-            // 这行是否需要换行？如果加\n，输出多了一行；如果不加，神奇地符合要求，prompt自动换行了，不知道这是为什么?
-            fflush(stdout);
-        }
-        /* Restore previous blocked set, unblocking SIGCHLD */
-        Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+        executable(argv,argc,cmdline,OUT,bg);
     }
     return;
 }
@@ -408,6 +380,63 @@ int builtin_cmd(char **argv, int argc)
     return 1;
 }
 
+/*
+ *
+ * executable - run the executable file
+ * 
+ */
+void executable(char **argv,int argc, char *cmdline, FILE *OUT, int bg){
+
+//实现parallel的思路：
+    pid_t pid; //Process id
+
+    sigset_t mask_chld, prev_mask, mask_all;
+    Sigemptyset(&mask_chld);
+    Sigaddset(&mask_chld, SIGCHLD);
+    Sigfillset(&mask_all);
+
+    /* Block SIGCHLD to prevent the race condition where the child is reaped by sigchld handler
+            (and thus removed from the job list) before the parent calls addjob. */
+    Sigprocmask(SIG_BLOCK, &mask_chld, &prev_mask);
+
+    //TODO: 改成Pthread_create
+    pid = Fork();
+    if (pid == 0) //child runs user job
+    {
+
+        //restore the prev_mask
+        Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+        //puts the child in a new process group whose group ID is identical to the child’s PID
+        setpgid(0, 0);
+        //redirection
+        redirect(OUT);
+        //run the job
+        Execve(argv[0], argv, environ);
+        //这个要加，防止execve失败
+        exit(0);
+    }
+
+    //before manipulating the global variables, mask all the possible signals
+    Sigprocmask(SIG_BLOCK, &mask_all, NULL);
+
+    //TODO: pid改成pid数组
+    // waitfg同时wait多个，可以顺序wait
+    addjob(jobs, pid, bg + 1, cmdline);
+    if (!bg)
+    {
+        waitfg(pid, prev_mask);      
+    }
+    else
+    {
+        printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);
+        // 这行是否需要换行？如果加\n，输出多了一行；如果不加，神奇地符合要求，prompt自动换行了，不知道这是为什么?
+        fflush(stdout);
+    }
+    /* Restore previous blocked set, unblocking SIGCHLD */
+    Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+} 
+
+
 /* 
  * do_bgfg - Execute the builtin bg and fg commands
  */
@@ -536,6 +565,7 @@ void waitfg(pid_t pid,sigset_t prev_mask)
 void sigchld_handler(int sig) 
 {
     int old_errno=errno;
+    errno = 0;
     pid_t pid;
     int status;
     if (verbose)
@@ -583,7 +613,7 @@ void sigchld_handler(int sig)
 
     // at this time, error can be EINTR / success
     if(errno!=ECHILD && errno!=EINTR && errno != 0)
-        unix_error("waitpid error\n"); //Sio
+        unix_error("waitpid error"); //Sio
     
     if(verbose)
         Sio_puts("sigchld_handler: exiting\n");
