@@ -1,2 +1,4 @@
-ls -l
+./myspin 5
+./myspin 20 & ./myspin 10
+./myspin 10 & ./myspin 20 
 quit

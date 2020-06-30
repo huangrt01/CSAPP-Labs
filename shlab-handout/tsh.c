@@ -16,6 +16,7 @@
 #define MAXJOBS      16   /* max jobs at any point in time */
 #define MAXJID    1<<16   /* max job ID */
 #define MAXPATH      64
+#define MAXPARALLEL   8    /* max parallel commands */
 
 /* Job states */
 #define UNDEF 0 /* undefined */
@@ -108,7 +109,7 @@ int main(int argc, char **argv)
     Dup2(STDOUT_FILENO,STDERR_FILENO);
     //dup2(1, 2);
     FILE *IN = stdin;
-    char **input_file=NULL;
+    char **input_file;
 
     /* Parse the command line */
     while ((c = getopt(argc, argv, "b:hvp")) != EOF) {
@@ -147,10 +148,10 @@ int main(int argc, char **argv)
 
     /* Initialize the job list */
     initjobs(jobs);
-
-    char cmdline[MAXLINE];
+    char *cmdline; 
     /* Execute the shell's read/eval loop */
     while(1){
+        cmdline = (char *)Malloc(MAXLINE);
         /* Read command line */
         if (emit_prompt) {
             printf("%s", prompt);
@@ -163,21 +164,46 @@ int main(int argc, char **argv)
         }
         else{
             if(!*input_file) break;
-            strcpy(cmdline,*input_file++);
-            free(*input_file-1);
+            strcpy(cmdline,*input_file);
+            input_file++;
+            // char *temp = *input_file;
+            // input_file++;
+            // free(temp);
         }    
         if(verbose && batch_mode ) printf("Evaluating cmdline:%s\n",cmdline);
+
         /* Evaluate the command line */
-        if(strlen(cmdline)>1 ){
-            if (cmdline[strlen(cmdline) - 1] != '\n'){
-                cmdline[strlen(cmdline)] = '\n';
-                cmdline[strlen(cmdline)] = '\0';
-            }
-            eval(cmdline);
+        /* implement the parallel commands: 
+            the first n-1 processes are in bg and the last one is in fg */
+        /* to wait the parallel background processes, use the syscall wait() in shell */ 
+        char *token;
+        char delim_parallel[]="&";
+        char parallel_command[MAXPARALLEL][MAXLINE];
+        int parallel_num=0;
+        for(token = strsep(&cmdline,delim_parallel);token != NULL; token = strsep(&cmdline,delim_parallel)){
+            strcpy(parallel_command[parallel_num],token);
+            parallel_num++;
         }
+        for(int i=0;i<parallel_num;i++){
+            token = parallel_command[i];
+            if (strlen(token) > 1)
+            {
+                if (token[strlen(token) - 1] != '\n')
+                {
+                    strcat(token,"\n");
+                }
+                if (i != parallel_num - 1)  // there must be one fg job!
+                {
+                    token[strlen(token) - 1] = '\0';
+                    strcat(token, " &\n");
+                }
+            }
+            if (strlen(token))
+                eval(token);
+        }
+        free(cmdline);
         fflush(stdout);
         fflush(stdout);
-        
     } 
 
     fflush(stdout);

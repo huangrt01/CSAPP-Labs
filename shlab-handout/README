@@ -2,6 +2,22 @@
 CS:APP Shell Lab
 ################
 
+current Built-in commands:
+
+* exit/quit
+* cd
+* pwd
+* jobs
+* bg/fg
+* path: The `path` command takes 0 or more arguments, with each argument separated by whitespace from the others. A typical usage would be like this: `wish> path /bin /usr/bin`, which would add `/bin` and `/usr/bin` to the search path of the shell. If the user sets path to be empty, then the shell should not be able to run any programs (except built-in commands). The `path` command always overwrites the old path with the newly specified path.
+
+based on the needs of [OSTEP Shell Lab](https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell), I additionally implement the following features:
+
+* Wrong input error
+* Paths
+* Redirection
+* Parallel commands
+
 Files:
 
 Makefile	# Compiles your shell program and runs the tests
